@@ -274,8 +274,8 @@ async def help(ctx):
 
     commands_info = [
         {'name': 'ip', 'description': 'Muestra la IP del servidor.'},
-        {'name': 'players', 'description': 'Muestra la lista de jugadores en el servidor.'},
-        {'name': 'command', 'description': 'Ejecuta un comando en la consola del servidor (solo para administradores).'},
+        {'name': 'jugadores', 'description': 'Muestra la lista de jugadores en el servidor.'},
+        {'name': 'comando', 'description': 'Ejecuta un comando en la consola del servidor (solo para administradores).'},
         {'name': 'help', 'description': 'Muestra este mensaje.'},
     ]
 
