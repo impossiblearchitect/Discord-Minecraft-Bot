@@ -121,7 +121,7 @@ async def on_message(message):
 
 @bot.event
 async def on_ready():
-    print(f'Bot conectado como {bot.user.name}}')
+    print(f'Bot conectado como {bot.user.name}')
     global nueva_ip
     bot.loop.create_task(check_log())
     bot.loop.create_task(minecraft_to_discord())
