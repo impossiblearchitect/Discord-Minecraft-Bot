@@ -321,8 +321,9 @@ async def help(ctx):
         {'name': 'ip', 'description': 'Muestra la IP del servidor.'},
         {'name': 'jugadores', 'description': 'Muestra la lista de jugadores en el servidor.'},
         {'name': 'comando', 'description': 'Ejecuta un comando en la consola del servidor (solo para administradores).'},
+        {'name': 'botstatus', 'description': 'obtienes informacion si el bot logro establecer conexion con el servidor (solo para administradores).'},
         {'name': 'help', 'description': 'Muestra este mensaje.'},
-        {'name': 'botstatus', 'description': 'obtienes informacion si el bot logro establecer conexion con el servidor (solo para administradores).'}
+        {'name': 'mencion', 'description': 'Puedes mencionar este bot para obtener informacion acerca del servidor.'},
     ]
 
     for cmd_info in commands_info:
