@@ -71,8 +71,10 @@ async def check_server_and_rcon_connection():
 
     return embed
 
-@bot.command()
 async def botstatus(ctx):
+    if not any(role.name == admin for role in ctx.author.roles):
+        await ctx.send(f"No tienes los permisos necesarios para ejecutar este comando.")
+        return
     embed = await check_server_and_rcon_connection()
     await ctx.send(embed=embed)
 
@@ -320,6 +322,7 @@ async def help(ctx):
         {'name': 'jugadores', 'description': 'Muestra la lista de jugadores en el servidor.'},
         {'name': 'comando', 'description': 'Ejecuta un comando en la consola del servidor (solo para administradores).'},
         {'name': 'help', 'description': 'Muestra este mensaje.'},
+        {'name': 'botstatus', 'description': 'obtienes informacion si el bot logro establecer conexion con el servidor (solo para administradores).'}
     ]
 
     for cmd_info in commands_info:
