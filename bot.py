@@ -45,6 +45,37 @@ nueva_ip = None
 progress ={}
 current_time={}
 
+async def check_server_and_rcon_connection():
+    embed = Embed(title="Bot Status", color=discord.Color.red())
+
+    last_line = await get_last_line(log_path)
+    if last_line is not None:
+        embed.add_field(name="Last Log Line", value="Obtained last line from log file.")
+    else:
+        embed.add_field(name="Last Log Line", value="Failed to obtain last line from log file.")
+
+    try:
+        server = JavaServer(rcon_host, ip_port)
+        status = server.status()
+        embed.add_field(name="Server Connection", value="Connection established successfully.")
+    except Exception as e:
+        embed.add_field(name="Server Connection", value="Failed to establish connection.")
+        embed.add_field(name="Error", value=str(e))
+
+    try:
+        with mcrcon.MCRcon(rcon_host, rcon_password, rcon_port) as rcon:
+            embed.add_field(name="RCON Connection", value="Connection established successfully.")
+    except Exception as e:
+        embed.add_field(name="RCON Connection", value="Failed to establish connection.")
+        embed.add_field(name="Error", value=str(e))
+
+    return embed
+
+@bot.command()
+async def botstatus(ctx):
+    embed = await check_server_and_rcon_connection()
+    await ctx.send(embed=embed)
+
 def create_embed(texto1, texto2, texto3):
     global server_name
     embed = discord.Embed(title=server_name, color=discord.Color.blue())
@@ -106,7 +137,8 @@ async def minecraft_to_discord():
 @bot.event
 async def on_message(message):
     if message.author.bot:
-        return 
+        return
+
     if message.channel.id == chat_channel_id:
         username = message.author.name
         content = message.content
@@ -114,6 +146,17 @@ async def on_message(message):
         with mcrcon.MCRcon(rcon_host, rcon_password, port=rcon_port) as rcon:
             response = rcon.command(command)
             print(response)
+
+    if bot.user.mentioned_in(message):
+        if message.author != bot.user:
+            jugadores = await get_players(rcon_host, ip_port)
+            estado = "en línea" if jugadores is not None else "apagado"
+            ip = nueva_ip  # Variable global con la dirección IP del servidor
+            response = f"Hola {message.author.mention}.\nEl servidor {server_name} se encuentra actualmente {estado} " \
+                       f"con {jugadores} jugadores en el servidor.\nEsta es la IP del servidor: {ip}\n" \
+                       f"El prefijo del bot es: {prefix}"
+            await message.channel.send(response)
+
     await bot.process_commands(message)
 
 
