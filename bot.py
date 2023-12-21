@@ -3,7 +3,7 @@ from discord.ext import commands
 import mcrcon
 import os
 import asyncio
-from pyngrok import ngrok
+# from pyngrok import ngrok
 from mcstatus import JavaServer
 import time
 import json
@@ -15,38 +15,39 @@ intents.messages = True
 
 def load_credentials():
     with open('config.json') as file:
-        credentials = json.load(file)#obtener las credenciales de config.json
+        #get the credentials from the config.json file
+        credentials = json.load(file) 
     return credentials
 
 credentials = load_credentials()
 
-prefix = credentials['prefix'] #prefix de los comandos
-bot_token = credentials['token'] #token privado del bot
-ip_channel_id = credentials['channel_for_ip'] #canal de la ip
-chat_channel_id = credentials['channel_for_chat'] #canal del chat vinculado
-log_channel_id = credentials['channel_for_log'] #canal del registro
-log_path = credentials['path_to_latestlog'] #ubicacion de: logs/latest.log
+prefix = credentials['prefix'] #command prefix
+bot_token = credentials['token'] #bot's private token
+ip_channel_id = credentials['channel_for_ip'] #channel id for the ip(?)
+chat_channel_id = credentials['channel_for_chat'] #channel id for (synced?) chat
+log_channel_id = credentials['channel_for_log'] #channel id for server log
+log_path = credentials['path_to_latestlog'] # path to logs/latest.log (the folder or the file?)
 rcon_host = credentials['minecraft_ip'] #localhost
 rcon_port = credentials['rcon_port'] #25575
 ip_port = credentials['ip_port'] #25565
-rcon_password = credentials['rcon_password'] #contraseña del rcon
-server_name = credentials['server_name'] #nombre del servidor
-admin = credentials['admin_role']# el rol necesario para ejecutar el comando "comando"
-wait_server = credentials['wait_server'] #yo pongo 30 segundos pero tal vez 20 sean suficiente
+rcon_password = credentials['rcon_password'] #rcon password
+server_name = credentials['server_name'] #server name
+admin = credentials['admin_role']# the role required to execute the "commands" command
+wait_server = credentials['wait_server'] #time to wait for the server (to start?)
 
 filter = ['Thread RCON Client', '[Server thread/INFO]: RCON']# filter RCON lines
-max_players_to_show = 10 #Numero de jugadores maximos que se peuden mostrar en el comando "jugadores"
+max_players_to_show = 10 #maximum number of players that the "players" command can show
 
 bot = commands.Bot(command_prefix=prefix, intents=intents)
 
 bot.remove_command('help')
 
-nueva_ip = None
+# nueva_ip = None
 progress ={}
 current_time={}
 
 async def check_server_and_rcon_connection():
-    embed = Embed(title="Bot Status", color=discord.Color.red())
+    embed = discord.Embed(title="Bot Status", color=discord.Color.red())
 
     last_line = await get_last_line(log_path)
     if last_line is not None:
@@ -73,18 +74,18 @@ async def check_server_and_rcon_connection():
 
 async def botstatus(ctx):
     if not any(role.name == admin for role in ctx.author.roles):
-        await ctx.send(f"No tienes los permisos necesarios para ejecutar este comando.")
+        await ctx.send(f"You do not have the necessary permissions to execute this command.")
         return
     embed = await check_server_and_rcon_connection()
     await ctx.send(embed=embed)
 
-def create_embed(texto1, texto2, texto3):
+def create_embed(server_status: str, player_status: str):
     global server_name
     embed = discord.Embed(title=server_name, color=discord.Color.blue())
-    embed.add_field(name="Estado", value=texto1, inline=False)
-    embed.add_field(name="Dirección IP", value=texto2, inline=False)
-    embed.add_field(name="Jugadores", value=texto3, inline=False)
-    embed.set_footer(text="Se actualiza cada minuto")
+    embed.add_field(name="Status", value=server_status, inline=False)
+    # embed.add_field(name="IP Address", value=address, inline=False)
+    embed.add_field(name="Players", value=player_status, inline=False)
+    embed.set_footer(text="Updates every minute")
     return embed
 
 
@@ -108,13 +109,13 @@ async def purge_channel():
         async for message in channel.history(limit=100):
             messages.append(message)
         if not messages:
-            print('No se encontraron más mensajes para borrar.')
+            print('No more messages to delete.')
             break
         await channel.delete_messages(messages)
         deleted += len(messages)
-        print(f'Borrados {deleted} mensajes en total')
+        print(f'Deleted {deleted} messages.')
         if len(messages) < 100:
-            print('No se pueden borrar más mensajes debido a las restricciones de Discord, o no hay mas mensajes en el canal.')
+            print('No more messages can be deleted due to Discord API limitations, or channel is empty.')
             break
         await asyncio.sleep(1)
 
@@ -151,12 +152,16 @@ async def on_message(message):
 
     if bot.user.mentioned_in(message):
         if message.author != bot.user:
-            jugadores = await get_players(rcon_host, ip_port)
-            estado = "en línea" if jugadores is not None else "apagado"
-            ip = nueva_ip  # Variable global con la dirección IP del servidor
-            response = f"Hola {message.author.mention}.\nEl servidor {server_name} se encuentra actualmente {estado} " \
-                       f"con {jugadores} jugadores en el servidor.\nEsta es la IP del servidor: {ip}\n" \
-                       f"El prefijo del bot es: {prefix}"
+            player_count = await get_player_count(rcon_host, ip_port)
+            if player_count is None:
+                server_status = "offline"
+            elif player_count == 0:
+                server_status = "idle"
+            else:
+                server_status = "online"
+            # ip = nueva_ip  # Variable global con la dirección IP del servidor
+            response = f"Hello {message.author.mention}.\nThe server {server_name} is currently {server_status}" \
+                       f"with {player_count} online.\n This bot's prefix is: {prefix}"
             await message.channel.send(response)
 
     await bot.process_commands(message)
@@ -166,70 +171,75 @@ async def on_message(message):
 
 @bot.event
 async def on_ready():
-    print(f'Bot conectado como {bot.user.name}')
-    global nueva_ip
+    print(f'Bot connected as {bot.user.name}')
+    # global nueva_ip
     bot.loop.create_task(check_log())
     bot.loop.create_task(minecraft_to_discord())
     await purge_channel()
 
     await bot.change_presence(activity=discord.Game(name=f'{prefix}ayuda'))
     
-    ngrok_tunnel = ngrok.connect(ip_port, 'tcp')
+    # ngrok_tunnel = ngrok.connect(ip_port, 'tcp')
 
-    nueva_ip = ngrok_tunnel.public_url.replace("tcp://", "")
+    # nueva_ip = ngrok_tunnel.public_url.replace("tcp://", "")
 
-    print("=== IP Details ===")
-    print(f"Dirección IP: {nueva_ip}")
-    print(f"URL pública completa: {ngrok_tunnel.public_url}")
-    print(f"Protocolo: {ngrok_tunnel.proto}")
-    print(f"========================")
+    # print("=== IP Details ===")
+    # print(f"IP Address: {nueva_ip}")
+    # print(f"Full Public URL: {ngrok_tunnel.public_url}")
+    # print(f"Protocol: {ngrok_tunnel.proto}")
+    # print(f"========================")
 
-    canal = bot.get_channel(ip_channel_id)
+    channel = bot.get_channel(ip_channel_id)
 
-    async for mensaje in canal.history():
-        if mensaje.author == bot.user and isinstance(mensaje.embeds, list) and len(mensaje.embeds) > 0:
-            await mensaje.delete()
+    async for message in channel.history():
+        if message.author == bot.user and isinstance(message.embeds, list) and len(message.embeds) > 0:
+            await message.delete()
 
-    await canal.edit(topic=f'Encendiendo servidor -\n IP pública: {nueva_ip}')
+    # await channel.edit(topic=f'Encendiendo servidor -\n IP pública: {nueva_ip}')
     
-    create_embed("Enecndiendo servidor", nueva_ip, "-")
+    create_embed("Connecting to server", "-")
 
     await asyncio.sleep(wait_server)
     
-    jugadores = await get_players(rcon_host, ip_port)
-    if jugadores is not None:
-        print("Conexión establecida con el servidor")
+    player_count = await get_player_count(rcon_host, ip_port)
+    if player_count is not None:
+        print("Connection established to server.")
     else:
-        print("No se pudo establecer conexión con el servidor")
+        print("Could not establish connection to server.")
     
     while True:
-        jugadores = await get_players(rcon_host, ip_port)
-        if jugadores is not None:
-            descripcion = f'Jugadores: {jugadores} -\nIP pública: {nueva_ip}'
-            texto1 = "Online"
-            texto2 = f"{nueva_ip}"
-            texto3 = f"{jugadores}"
+        player_count = await get_player_count(rcon_host, ip_port)
+        if player_count is None:
+            description = f"Server offline"
+            server_status = "offline"
+            player_count = "-"
+        elif player_count == 0:
+            description = f"Server idle"
+            server_status = "idle"
+            player_count = "0"
         else:
-            descripcion = f'Servidor apagado -\nIP pública: {nueva_ip}'
-            texto1 = "Apagado"
-            texto2 = f"{nueva_ip}"
-            texto3 = "-"
+            description= f"Server online"
+            server_status = "online"
+            player_count = str(player_count)
 
-        await canal.edit(topic=descripcion)
+        await channel.edit(topic=description)
 
-        mensaje_embebido = create_embed(texto1, texto2, texto3)
+        message_embed = create_embed(server_status, player_count)
 
-        async for mensaje in canal.history():
-            if mensaje.author == bot.user and isinstance(mensaje.embeds, list) and len(mensaje.embeds) > 0:
-                await mensaje.edit(embed=mensaje_embebido)
+        async for message in channel.history():
+            if message.author == bot.user and isinstance(message.embeds, list) and len(message.embeds) > 0:
+                await message.edit(embed=message_embed)
                 break
         else:
-            await canal.send(embed=mensaje_embebido)
+            await channel.send(embed=message_embed)
     
         await asyncio.sleep(60)
 
 
-
+# This function is used to prevent spamming commands
+# and potentially could be modified to restrict the use
+# of some commands to administrators
+# It returns True if the command should be ignored.
 async def control(ctx,prkey,wait):
     global admin
 
@@ -251,13 +261,13 @@ async def control(ctx,prkey,wait):
     return False
 
 
-async def get_players(ip, puerto):
+async def get_player_count(ip, puerto):
     try:
         server = JavaServer(ip, puerto)
         status = server.status()
         return status.players.online
     except Exception as e:
-        print(f"Error al obtener los jugadores: {e}")
+        print(f"Error getting players: {e}")
         return None
 
 
@@ -270,60 +280,59 @@ async def get_last_line(filename):
     return last_line
 
 
-def word_filter(texto):
-    for palabra in filter:
-        if palabra.lower() in texto.lower():
+def word_filter(text):
+    for word in filter:
+        if word.lower() in text.lower():
             return True
     return False
 
 
 
-@bot.command(aliases=['IP', 'Ip', 'server', 'servidor', 'Server', 'Servidor'])
-async def ip(ctx):
-    if await control(ctx, 'ip', 3):
-        return
-    if nueva_ip is not None:
-        await ctx.send(f'Esta es la IP del servidor: {nueva_ip}')
-    else:
-        await ctx.send('La IP del servidor aún no está disponible.')
+# @bot.command(aliases=['IP', 'Ip', 'server', 'servidor', 'Server', 'Servidor'])
+# async def ip(ctx):
+#     if await control(ctx, 'ip', 3):
+#         return
+    # if nueva_ip is not None:
+    #     await ctx.send(f'Esta es la IP del servidor: {nueva_ip}')
+    # else:
+    #     await ctx.send('La IP del servidor aún no está disponible.')
 
 
-@bot.command(aliases=['jugador', 'Jugadores', 'Jugador', 'lista', 'Lista', 'list' , 'List'])
-async def jugadores(ctx):
-    if await control(ctx, 'jugadores', 3):
+@bot.command(aliases=['players', 'Players', 'Player', 'list' , 'List'])
+async def players(ctx):
+    if await control(ctx, 'players', 3):
         return
     with mcrcon.MCRcon(rcon_host, rcon_password, port=rcon_port) as rcon:
         response = rcon.command('list')
         players = response.split(':')[1].strip().split(', ')
 
         if len(players) == 1 and players[0] == '':
-            await ctx.send("No hay jugadores en el servidor actualmente.")
+            await ctx.send("There are no players online.")
             return
 
         players_remaining = len(players) - max_players_to_show
 
         if players_remaining > 0:
             players_list = '\n'.join(players[:max_players_to_show])
-            players_list += f'\n... y {players_remaining} más.'
+            players_list += f'\n... and {players_remaining} more.'
         else:
             players_list = '\n'.join(players)
 
-        embed = discord.Embed(title='Lista de Jugadores', description=players_list, color=discord.Color.blue())
+        embed = discord.Embed(title='Players Online', description=players_list, color=discord.Color.blue())
         await ctx.send(embed=embed)
 
-@bot.command(aliases=['ayuda', 'H', 'h', 'Ayuda', 'comandos' , 'Comandos'])
+@bot.command(aliases=['help', 'H', 'h', 'Help', 'commands' , 'Commands'])
 async def help(ctx):
     if await control(ctx, 'help', 3):
         return
     embed = discord.Embed(title='Comando de Ayuda', color=discord.Color.green())
 
     commands_info = [
-        {'name': 'ip', 'description': 'Muestra la IP del servidor.'},
-        {'name': 'jugadores', 'description': 'Muestra la lista de jugadores en el servidor.'},
-        {'name': 'comando', 'description': 'Ejecuta un comando en la consola del servidor (solo para administradores).'},
-        {'name': 'botstatus', 'description': 'obtienes informacion si el bot logro establecer conexion con el servidor (solo para administradores).'},
-        {'name': 'help', 'description': 'Muestra este mensaje.'},
-        {'name': 'mencion', 'description': 'Puedes mencionar este bot para obtener informacion acerca del servidor.'},
+        {'name': 'players', 'description': 'Lists online players.'},
+        # {'name': 'command', 'description': 'Runs a command in the server console (server admins only).'},
+        {'name': 'botstatus', 'description': 'Displays connection information with the server (server admins only).'},
+        {'name': 'help', 'description': 'Display this message.'},
+        {'name': 'mention', 'description': 'You can @mention the bot to get the server status.'},
     ]
 
     for cmd_info in commands_info:
@@ -333,15 +342,15 @@ async def help(ctx):
 
     await ctx.send(embed=embed)
 
-@bot.command(aliases=['comand', 'Comando', 'Comand', 'Command', 'command', 'execute' , 'Execute' , 'exe' , 'Exe' , 'ejecutar' , 'Ejecutar'])
-async def comando(ctx, *, command):
-    global admin
-    if not any(role.name == admin for role in ctx.author.roles):
-        await ctx.send(f"No tienes los permisos necesarios para ejecutar este comando.")
-        return
-    with mcrcon.MCRcon(rcon_host, rcon_password, port=rcon_port) as rcon:
-        response = rcon.command(command)
-        await ctx.send(f'Respuesta de la consola: {response}')
+# @bot.command(aliases=['comand', 'Comando', 'Comand', 'Command', 'command', 'execute' , 'Execute' , 'exe' , 'Exe' , 'ejecutar' , 'Ejecutar'])
+# async def comando(ctx, *, command):
+#     global admin
+#     if not any(role.name == admin for role in ctx.author.roles):
+#         await ctx.send(f"No tienes los permisos necesarios para ejecutar este comando.")
+#         return
+#     with mcrcon.MCRcon(rcon_host, rcon_password, port=rcon_port) as rcon:
+#         response = rcon.command(command)
+#         await ctx.send(f'Respuesta de la consola: {response}')
 
 bot.run(bot_token)
 
